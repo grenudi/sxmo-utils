@@ -139,7 +139,9 @@ _sinkssubmenu() {
 	if [ -z "$default_sink" ]; then
 		default_sink="$(pactl get-default-sink)"
 	fi
-	pactl --format=json list sinks | jq -r '.[] | .name, .description' | \
+	pactl --format=json list sinks | jq -r '.[]
+		| select(.properties."node.virtual" != "true")
+		| .name, .description' | \
 		while read -r line; do
 
 		name="$line"
@@ -180,7 +182,9 @@ _sourcessubmenu() {
 		default_source="$(pactl get-default-source)"
 	fi
 	pactl --format=json list sources | \
-		jq -r '.[] | select(.monitor_source == "")
+		jq -r '.[]
+		| select(.properties."node.virtual" != "true")
+		| select(.monitor_source == "")
 		| .name, .description' | while read -r line; do
 
 		name="$line"
