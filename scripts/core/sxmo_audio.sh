@@ -10,12 +10,10 @@ set -e
 
 notifyvol() {
 	vol="$1"
-	if [ "-" = "$vol" ]; then
-		vol="$(cat)"
-	fi
-	if [ "muted" = "$vol" ]; then
-		vol=0
-	fi
+	case "$vol" in
+		"-") vol="$(cat)" ;;
+		"muted") vol=0 ;;
+	esac
 	if [ -z "$SXMO_WOB_DISABLE" ]; then
 		printf "%s\n" "$vol" > "$XDG_RUNTIME_DIR"/sxmo.obsock
 	else
@@ -44,7 +42,8 @@ volget() {
 	if volismuted; then
 		printf "muted"
 	else
-		pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | cut -d'/' -f2 | sed 's/ //g' | sed 's/\%//'
+		pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | \
+			cut -d'/' -f2 | sed 's/ //g' | sed 's/\%//'
 	fi
 }
 
@@ -73,7 +72,8 @@ micvolget() {
 	if micismuted; then
 		printf "muted"
 	else
-		pactl get-source-volume @DEFAULT_SOURCE@ | head -n1 | cut -d'/' -f2 | sed 's/ //g' | sed 's/\%//'
+		pactl get-source-volume @DEFAULT_SOURCE@ | head -n1 | \
+			cut -d'/' -f2 | sed 's/ //g' | sed 's/\%//'
 	fi
 }
 
@@ -93,14 +93,22 @@ devicesetinput() {
 
 # get the current source pactl data
 devicegetinput() {
-	[ -z "$1" ] && default_source="$(pactl get-default-source)" || default_source="$1"
-	pactl --format=json list sources | jq -r ".[] | select(.name == \"$default_source\")"
+	default_source="$1"
+	if [ -z "$default_source" ]; then
+		default_source="$(pactl get-default-source)"
+	fi
+	pactl --format=json list sources | \
+		jq -r ".[] | select(.name == \"$default_source\")"
 }
 
 # get the current sink pactl data
 deviceget() {
-	[ -z "$1" ] && default_sink="$(pactl get-default-sink)" || default_sink="$1"
-	pactl --format=json list sinks | jq -r ".[] | select(.name == \"$default_sink\")"
+	default_sink="$1"
+	if [ -z "$default_sink" ]; then
+		default_sink="$(pactl get-default-sink)"
+	fi
+	pactl --format=json list sinks | \
+		jq -r ".[] | select(.name == \"$default_sink\")"
 }
 
 # get the default sink
@@ -127,32 +135,54 @@ profileset() {
 
 # get a list of sinks
 _sinkssubmenu() {
-	[ -z "$1" ] && default_sink="$(pactl get-default-sink)" || default_sink="$1"
-	pactl --format=json list sinks | jq -r '.[] | .name, .description' | while read -r line; do
+	default_sink="$1"
+	if [ -z "$default_sink" ]; then
+		default_sink="$(pactl get-default-sink)"
+	fi
+	pactl --format=json list sinks | jq -r '.[] | .name, .description' | \
+		while read -r line; do
+
 		name="$line"
 		read -r description
 		if [ "$default_sink" = "$name" ]; then
-			printf "%s %s %s ^ sinkset %s\n" "$icon_chk" "$icon_spk" "$description" "$name"
+			printf "%s %s %s ^ sinkset %s\n" \
+				"$icon_chk" "$icon_spk" "$description" "$name"
 		else
-			printf "  %s %s ^ sinkset %s\n" "$icon_spk" "$description" "$name"
+			printf "  %s %s ^ sinkset %s\n" \
+				"$icon_spk" "$description" "$name"
 		fi
 	done
 }
 
 # get a list of output ports
 _outportssubmenu() {
-	[ -z "$1" ] && default_sink="$(pactl get-default-sink)" || default_sink="$1"
+	default_sink="$1"
+	if [ -z "$default_sink" ]; then
+		default_sink="$(pactl get-default-sink)"
+	fi
 	active_out_port="$(deviceget "$default_sink")"
-	pactl --format=json list sinks | jq -r ".[] | select(.name == \"$default_sink\" ) | .ports[] | select(.availability != \"not available\" ) | .name" | sed 's/\[Out] //' | while read -r line; do
-		[ "$active_out_port" = "$line" ] && icon="$icon_ton" || icon="$icon_tof"
+	pactl --format=json list sinks | \
+		jq -r ".[] | select(.name == \"$default_sink\" )
+		| .ports[] | select(.availability != \"not available\" )
+		| .name" | sed 's/\[Out] //' |
+		while read -r line; do
+
+		[ "$active_out_port" = "$line" ] && \
+			icon="$icon_ton" || icon="$icon_tof"
 		printf "  %s %s ^ deviceset %s\n" "$icon" "$line" "$line"
 	done
 }
 
 # get a list of input sources
 _sourcessubmenu() {
-	[ -z "$1" ] && default_source="$(pactl get-default-source)" || default_source="$1"
-	pactl --format=json list sources | jq -r '.[] | select (.monitor_source == "") | .name, .description' | while read -r line; do
+	default_source="$1"
+	if [ -z "$default_source" ]; then
+		default_source="$(pactl get-default-source)"
+	fi
+	pactl --format=json list sources | \
+		jq -r '.[] | select(.monitor_source == "")
+		| .name, .description' | while read -r line; do
+
 		name="$line"
 		read -r description
 		if [ "$default_source" = "$name" ]; then
@@ -165,15 +195,22 @@ _sourcessubmenu() {
 
 _cardssubmenu() {
 	cards="$(pactl -f json list cards)"
-	printf "%s\n" "$cards" | jq -r '.[] | [.name, .active_profile] | @tsv' | \
+	printf "%s\n" "$cards" | \
+		jq -r '.[] | [.name, .active_profile] | @tsv' | \
 		while IFS="	" read -r card active_profile; do
+
 		printf "%s %s\n" "$icon_nte" "$card"
-		printf "%s\n" "$cards" | jq -r ".[] | select(.name == \"$card\") | .profiles | to_entries[] | select(.value.available) | [.key, .value.description] | @tsv" | \
+		printf "%s\n" "$cards" | \
+			jq -r ".[] | select(.name == \"$card\")
+			| .profiles | to_entries[] | select(.value.available)
+			| [.key, .value.description] | @tsv" | \
 			while IFS="	" read -r profile desc; do
+
 			if [ "$profile" = "$active_profile" ]; then
 				printf "%s %s ^ true\n" "$icon_chk" "$desc"
 			else
-				printf "  %s ^ profileset %s \"%s\"\n" "$desc" "$card" "$profile"
+				printf "  %s ^ profileset %s \"%s\"\n" \
+					"$desc" "$card" "$profile"
 			fi
 		done
 	done
@@ -183,24 +220,37 @@ _cardssubmenu() {
 _inportssubmenu() {
 	# if the Headset is NOT plugged in, then do not display Headset
 	# as a option, as clicking on it causes pulse to unset the source!!
-	[ -z "$1" ] && default_source="$(pactl get-default-source)" || default_source="$1"
+	default_source="$1"
+	if [ -z "$default_source" ]; then
+		default_source="$(pactl get-default-source)"
+	fi
 	active_in_port="$(devicegetinput "$default_source")"
-	pactl --format=json list sources | jq -r ".[] | select(.name == \"$default_source\" ) | .ports[] | select(.availability != \"not available\" ) | .name" | sed 's/\[In] //' | while read -r line; do
-		[ "$active_in_port" = "$line" ] && icon="$icon_ton" || icon="$icon_tof"
+	pactl --format=json list sources | \
+		jq -r ".[] | select(.name == \"$default_source\" )
+		| .ports[] | select(.availability != \"not available\" )
+		| .name" | sed 's/\[In] //' | \
+		while read -r line; do
+
+		[ "$active_in_port" = "$line" ] && \
+			icon="$icon_ton" || icon="$icon_tof"
 		printf "  %s %s ^ devicesetinput %s\n" "$icon" "$line" "$line"
 	done
 }
 
 _ringmodesubmenu() {
 	if [ -f "$XDG_CONFIG_HOME"/sxmo/.noring ]; then
-		printf " %s Ring ^ rm -f \"$XDG_CONFIG_HOME\"/sxmo/.noring\n" "$icon_tof"
+		printf ' %s Ring ^ rm -f "%s"/sxmo/.noring\n' \
+			"$icon_tof" "$XDG_CONFIG_HOME"
 	else
-		printf " %s Ring ^ touch \"$XDG_CONFIG_HOME\"/sxmo/.noring\n" "$icon_ton"
+		printf ' %s Ring ^ touch "%s"/sxmo/.noring\n' \
+			"$icon_ton" "$XDG_CONFIG_HOME"
 	fi
 	if [ -f "$XDG_CONFIG_HOME"/sxmo/.novibrate ]; then
-		printf " %s Vibrate ^ rm -f \"$XDG_CONFIG_HOME\"/sxmo/.novibrate\n" "$icon_tof"
+		printf ' %s Vibrate ^ rm -f "%s"/sxmo/.novibrate\n' \
+			"$icon_tof" "$XDG_CONFIG_HOME"
 	else
-		printf " %s Vibrate ^ touch \"$XDG_CONFIG_HOME\"/sxmo/.novibrate\n" "$icon_ton"
+		printf ' %s Vibrate ^ touch "%s"/sxmo/.novibrate\n' \
+			"$icon_ton" "$XDG_CONFIG_HOME"
 	fi
 	if [ -f "$XDG_CONFIG_HOME"/sxmo/.busy ]; then
 		end="$(cat "$XDG_CONFIG_HOME"/sxmo/.busy)"
@@ -209,52 +259,67 @@ _ringmodesubmenu() {
 		fi
 	fi
 	if [ -f "$XDG_CONFIG_HOME"/sxmo/.busy ]; then
-		printf " %s Busy ^ rm -f \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_ton"
+		printf ' %s Busy ^ rm -f "%s"/sxmo/.busy\n' \
+			"$icon_ton" "$XDG_CONFIG_HOME"
 	else
-		printf " %s Busy ^ touch \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tof"
-		printf " %s Busy for 15 min ^ date '+%%s+15*60' | bc > \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tmr"
-		printf " %s Busy for 30 min ^ date '+%%s+30*60' | bc > \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tmr"
-		printf " %s Busy for 1 hour ^ date '+%%s+60*60' | bc > \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tmr"
-		printf " %s Busy for 2 hour ^ date '+%%s+2*60*60' | bc > \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tmr"
-		printf " %s Busy for 3 hour ^ date '+%%s+3*60*60' | bc > \"$XDG_CONFIG_HOME\"/sxmo/.busy\n" "$icon_tmr"
+		printf ' %s Busy ^ touch "%s"/sxmo/.busy\n' \
+			"$icon_tof" "$XDG_CONFIG_HOME"
+		printf ' %s Busy for 15 min ^ date "+%%s+15*60" | bc > "%s"/sxmo/.busy\n' \
+			"$icon_tmr" "$XDG_CONFIG_HOME"
+		printf ' %s Busy for 30 min ^ date "+%%s+30*60" | bc > "%s"/sxmo/.busy\n' \
+			"$icon_tmr" "$XDG_CONFIG_HOME"
+		printf ' %s Busy for 1 hour ^ date "+%%s+60*60" | bc > "%s"/sxmo/.busy\n' \
+			"$icon_tmr" "$XDG_CONFIG_HOME"
+		printf ' %s Busy for 2 hour ^ date "+%%s+2*60*60" | bc > "%s"/sxmo/.busy\n' \
+			"$icon_tmr" "$XDG_CONFIG_HOME"
+		printf ' %s Busy for 3 hour ^ date "+%%s+3*60*60" | bc > "%s"/sxmo/.busy\n' \
+			"$icon_tmr" "$XDG_CONFIG_HOME"
 	fi
 }
 
 menuchoices() {
-cur_vol="$(volget)"
-cur_mic_vol="$(micvolget)"
-default_sink_name="$(devicegetdefaultsink)"
-default_source_name="$(devicegetdefaultsource)"
-grep . <<EOF
-$icon_cls Close Menu  ^ exit
-Output:
-$(_sinkssubmenu "$default_sink_name")
-$(
-if [ "$cur_vol" != "muted" ]; then
-	printf "  %s Volume (%s%%) ^ volup\n" "$icon_aru" "$cur_vol"
-	printf "  %s Volume (%s%%) ^ voldown\n" "$icon_ard" "$cur_vol"
-	printf "  %s Output Mute ^ voltogglemute\n" "$icon_tof"
-else
-	printf "  %s Output Mute ^ voltogglemute\n" "$icon_ton"
-fi
-)
-$(_outportssubmenu "$default_sink_name")
-Input:
-$(_sourcessubmenu "$default_source_name")
-$(
-if [ "$cur_mic_vol" != "muted" ]; then
-	printf "  %s Volume (%s%%) ^ micvolup\n" "$icon_aru" "$cur_mic_vol"
-	printf "  %s Volume (%s%%) ^ micvoldown\n" "$icon_ard" "$cur_mic_vol"
-	printf "  %s Input Mute ^ mictogglemute\n" "$icon_tof"
-else
-	printf "  %s Input Mute ^ mictogglemute\n" "$icon_ton"
-fi
-)
-$(_inportssubmenu "$default_source_name")
-Cards:
-$(_cardssubmenu)
-$(_ringmodesubmenu)
-EOF
+	cur_vol="$(volget)"
+	cur_mic_vol="$(micvolget)"
+	default_sink_name="$(devicegetdefaultsink)"
+	default_source_name="$(devicegetdefaultsource)"
+	grep . <<-EOF
+		$icon_cls Close Menu  ^ exit
+		Output:
+		$(_sinkssubmenu "$default_sink_name")
+		$(
+			if [ "$cur_vol" != "muted" ]; then
+				printf "  %s Volume (%s%%) ^ volup\n" \
+					"$icon_aru" "$cur_vol"
+				printf "  %s Volume (%s%%) ^ voldown\n" \
+					"$icon_ard" "$cur_vol"
+				printf "  %s Output Mute ^ voltogglemute\n" \
+					"$icon_tof"
+			else
+				printf "  %s Output Mute ^ voltogglemute\n" \
+					"$icon_ton"
+			fi
+		)
+		$(_outportssubmenu "$default_sink_name")
+		Input:
+		$(_sourcessubmenu "$default_source_name")
+		$(
+		if [ "$cur_mic_vol" != "muted" ]; then
+			printf "  %s Volume (%s%%) ^ micvolup\n" \
+				"$icon_aru" "$cur_mic_vol"
+			printf "  %s Volume (%s%%) ^ micvoldown\n" \
+				"$icon_ard" "$cur_mic_vol"
+			printf "  %s Input Mute ^ mictogglemute\n" \
+				"$icon_tof"
+		else
+			printf "  %s Input Mute ^ mictogglemute\n" \
+				"$icon_ton"
+		fi
+		)
+		$(_inportssubmenu "$default_source_name")
+		Cards:
+		$(_cardssubmenu)
+		$(_ringmodesubmenu)
+	EOF
 }
 
 if [ -n "$SXMO_NO_AUDIO" ]; then
@@ -278,7 +343,8 @@ case "$cmd" in
 					sxmo_dmenu.sh -i -p "Audio"
 			)"
 
-			CMD="$(printf "%s\n" "$CHOICES" | grep -m1 -F "$PICKED" | cut -d '^' -f2)"
+			CMD="$(printf "%s\n" "$CHOICES" | \
+				grep -m1 -F "$PICKED" | cut -d '^' -f2)"
 
 			eval "$CMD"
 		done
