@@ -8,3 +8,6 @@ export SXMO_POWER_BUTTON="0:0:pm8941_pwrkey"
 export SXMO_VOLUME_BUTTON="1:1:gpio-keys 0:0:pm8941_resin"
 export SXMO_SWAY_SCALE="3"
 export SXMO_VIBRATE_DEV="/dev/input/by-path/platform-884000.i2c-event"
+
+# the sensors daemon must not run across suspend (as on google,b4s4-sdm670)
+export SXMO_SUSPEND_STOP_SERVICES="hexagonrpcd-adsp-sensorspd"
