@@ -1111,6 +1111,11 @@ The following variables are used in device profiles, see DEVICES.
 	ID (from xinput) for the stylus device [DWM-ONLY] [default: 10]
 *SXMO_SUSPENDABLE_STATES* (states)
 	The list of suspendable states, with their timeout duration [default: "screenoff 3"]
+*SXMO_SUSPEND_STOP_SERVICES* (states)
+	Space separated list of system services that must not run across a
+	suspend: they are stopped before each suspend and started again after
+	it. Each needs a doas rule to stop and start it (see
+	configs/doas/50-sxmo.conf).
 *SXMO_TOUCHSCREEN_ID* (input)
 	ID (from xinput) for the touchscreen device [DWM-ONLY] [default: 10]
 *SXMO_VIBRATE_DEV* (misc)

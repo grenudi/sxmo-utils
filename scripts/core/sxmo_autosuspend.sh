@@ -38,16 +38,38 @@ wait_can_suspend() {
 	last_check="$(date +%s)"
 }
 
+# Services the device profile names in SXMO_SUSPEND_STOP_SERVICES are stopped
+# before each suspend and started again after it, whether it succeeded or not
+# (each needs a doas rule, see configs/doas/50-sxmo.conf).
+suspend_services() {
+	for service in $SXMO_SUSPEND_STOP_SERVICES; do
+		if [ -d /run/systemd/system ]; then
+			doas -n systemctl "$1" "$service"
+		else
+			doas -n rc-service "$service" "$1"
+		fi || sxmo_log "could not $1 $service"
+	done
+}
+
 while true; do
 	# Reading from wakeup_count blocks until there are no wakelocks
 	wakeup_count=$(cat /sys/power/wakeup_count)
 
 	wait_can_suspend
 
+	if [ -n "$SXMO_SUSPEND_STOP_SERVICES" ]; then
+		suspend_services stop
+		# Stopping services takes a while, and any wakeup event meanwhile
+		# (an LED blink takes a wakelock) makes the count read above stale
+		# and the suspend abort: read it again, now that they are stopped.
+		wakeup_count=$(cat /sys/power/wakeup_count)
+	fi
+
 	# If the wakeup count has changed since we read it, this will fail so we
 	# know to try again. If something takes a wake_lock after we do this, it
 	# will cause the kernel to abort suspend.
 	if ! echo "$wakeup_count" | doas tee /sys/power/wakeup_count > /dev/null; then
+		suspend_services start
 		continue
 	fi
 
@@ -55,9 +77,11 @@ while true; do
 	# retry. The delay grows while it keeps failing, so we don't eat up the
 	# system's resources (or bounce its devices) if the kernel can't suspend.
 	if ! sxmo_suspend.sh; then
+		suspend_services start
 		failed_suspend
 		continue
 	fi
+	suspend_services start
 	retry_delay=1
 
 	sleep 10
