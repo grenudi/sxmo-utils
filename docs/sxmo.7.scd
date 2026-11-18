@@ -1234,6 +1234,10 @@ The default values for environment variables are set in
 	The number of times the audio file will play.
 *SXMO_STATE*
 	the file containing the current state
+*SXMO_SUSPEND_RETRY_MAX*
+	The longest wait, in seconds, before trying again after suspend failed.
+	The wait starts at 1 second and doubles with each failure in a row
+	(default: 64).
 *SXMO_SWAY_SCALE*
 	the scaling factor to use for sway 
 *SXMO_TEXTSOUND*

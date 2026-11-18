@@ -8,6 +8,22 @@
 
 set -e
 
+# After a failed suspend, wait before the next try: 1s, then twice as long after
+# each failure in a row, up to SXMO_SUSPEND_RETRY_MAX seconds (default 64). A
+# kernel that keeps refusing to suspend is not asked again every second, and the
+# devices it resumes on every aborted try (a USB link, a modem) are not cycled
+# every second either. A suspend that succeeds starts over at 1s.
+retry_max="${SXMO_SUSPEND_RETRY_MAX:-64}"
+retry_delay=1
+failed_suspend() {
+	sxmo_log "suspend failed, next try in ${retry_delay}s"
+	sleep "$retry_delay"
+	retry_delay="$((retry_delay * 2))"
+	if [ "$retry_delay" -gt "$retry_max" ]; then
+		retry_delay="$retry_max"
+	fi
+}
+
 last_check=0
 wait_can_suspend() {
 	# If we already checked recently, then there's nothing to do. This helps
@@ -35,13 +51,14 @@ while true; do
 		continue
 	fi
 
-	# If sxmo_suspend failed then we didn't enter suspend, it should be safe
-	# to retry immediately. There's a delay so we don't eat up all the
-	# system resoures if the kernel can't suspend.
+	# If sxmo_suspend failed then we didn't enter suspend, it is safe to
+	# retry. The delay grows while it keeps failing, so we don't eat up the
+	# system's resources (or bounce its devices) if the kernel can't suspend.
 	if ! sxmo_suspend.sh; then
-		sleep 1
+		failed_suspend
 		continue
 	fi
+	retry_delay=1
 
 	sleep 10
 done
